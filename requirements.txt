@@ -1,0 +1,8 @@
+albumentations>=1.4.0
+dataclasses
+fsspec
+numpy
+opencv-python-headless>=4.9.0
+pandas
+pyarrow
+webdataset>=0.2.5
