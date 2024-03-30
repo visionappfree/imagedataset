@@ -87,12 +87,15 @@ class Downloader:
 
     def download(
         self,
+        shard_id: int,
         download_tasks: list[Task],
         writer: Writer,
     ) -> dict:
         stats = {}
         print("###############################")
-        print(f"async test started, num_to_download:{len(download_tasks)}!")
+        print(
+            f"[shard {shard_id}] downloader started, , num_to_download:{len(download_tasks)}!"
+        )
 
         try:
             start_time = time.time()
@@ -106,7 +109,7 @@ class Downloader:
                 else 0
             )
             print(
-                f"download done! download time: {duration}(s), image per second: {len(download_tasks) / duration}, total_succ: {total_succ}\n"
+                f"[shard {shard_id}] download done! download time: {duration}(s), image per second: {len(download_tasks) / duration}, total_succ: {total_succ}\n"
             )
         except Exception as err:  # pylint: disable=broad-except
             traceback.print_exc()

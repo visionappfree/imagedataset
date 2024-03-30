@@ -19,9 +19,9 @@ from .writer import WebDatasetSampleWriter
 
 
 def download_one_shard(args) -> dict:
-    image_downloader, tasks, output_file_path, output_schema = args
+    image_downloader, shard_id, tasks, output_file_path, output_schema = args
     writer = WebDatasetSampleWriter(output_file_path, schema=output_schema)
-    stats = image_downloader.download(download_tasks=tasks, writer=writer)
+    stats = image_downloader.download(shard_id, download_tasks=tasks, writer=writer)
     writer.close()
     return stats
 
@@ -72,6 +72,7 @@ def download(
 
     num_tasks = df.shape[0]
     num_shards = math.ceil(num_tasks / number_sample_per_shard)
+    print(f"tasks split to {num_shards} shards.")
     num_shards_digits = math.ceil(math.log10(num_shards))
     image_downloader = Downloader(
         max_concurrent_downloads=max_concurrent_downloads_per_process,
@@ -85,6 +86,7 @@ def download(
     shard_tasks_with_params = [
         (
             image_downloader,
+            shard_id,
             shard_task,
             os.path.join(output_folder_path, f"{shard_id:0{num_shards_digits}}"),
             output_schema,
