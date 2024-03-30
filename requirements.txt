@@ -1,9 +1,10 @@
 albumentations>=1.4.0
 dataclasses
+fire
 fsspec
 numpy
 opencv-python-headless>=4.9.0
 pandas
 pyarrow
+tqdm
 webdataset>=0.2.5
-fire

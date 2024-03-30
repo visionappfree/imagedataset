@@ -4,6 +4,7 @@ import time
 import traceback
 
 from dataclasses import dataclass
+from tqdm.asyncio import tqdm
 
 from .annotator import Annotator
 from .download_utils import async_download_content_with_retry
@@ -79,8 +80,10 @@ class Downloader:
                 self._download_one_task(semaphore, session, t, writer, stats)
                 for t in download_tasks
             ]
-            for task in asyncio.as_completed(tasks):
-                await task
+            for _ in tqdm(
+                asyncio.as_completed(tasks), total=len(tasks), desc="Downloading"
+            ):
+                await _
 
     def download(
         self,
@@ -88,6 +91,9 @@ class Downloader:
         writer: Writer,
     ) -> dict:
         stats = {}
+        print("###############################")
+        print(f"async test started, num_to_download:{len(download_tasks)}!")
+
         try:
             start_time = time.time()
             asyncio.run(self._download(download_tasks, writer, stats))
