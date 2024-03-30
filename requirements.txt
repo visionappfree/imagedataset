@@ -6,3 +6,4 @@ opencv-python-headless>=4.9.0
 pandas
 pyarrow
 webdataset>=0.2.5
+fire
