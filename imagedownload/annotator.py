@@ -105,8 +105,10 @@ class ImageCaptionAnnotator(Annotator):
             )
 
 
+_DEFAULT_IMAGE_CAPTION_PROMPT = "Caption the image. Remember, describe the image in detail, but do not stray beyond the information contained in the image itself. Limit your description to only what you can confidently observe."
+
+
 class GeminiImageCaptionAnnotator(ImageCaptionAnnotator):
-    PROMPT = "Caption the image. Remember, describe the image in detail, but do not stray beyond the information contained in the image itself. Limit your description to only what you can confidently observe."
     GENERATION_CONFIG = {
         "temperature": 0.9,
         "top_p": 1,
@@ -123,6 +125,7 @@ class GeminiImageCaptionAnnotator(ImageCaptionAnnotator):
     def __init__(
         self,
         gemini_api_keys: list[str],
+        prompt=_DEFAULT_IMAGE_CAPTION_PROMPT,
         gemini_model_name="gemini-pro-vision",
         qps_limit: float = 0.8,
         max_concurrent_call=10,
@@ -134,6 +137,7 @@ class GeminiImageCaptionAnnotator(ImageCaptionAnnotator):
             max_concurrent_call=max_concurrent_call,
         )
         self._gemini_model_name = gemini_model_name
+        self._prompt = prompt
 
     def construct_request(self, api_key, image_bytes, mime_type):
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{self._gemini_model_name}:generateContent?key={api_key}"
@@ -142,7 +146,7 @@ class GeminiImageCaptionAnnotator(ImageCaptionAnnotator):
             "contents": [
                 {
                     "parts": [
-                        {"text": GeminiImageCaptionAnnotator.PROMPT},
+                        {"text": self._prompt},
                         {
                             "inline_data": {
                                 "mime_type": mime_type,
@@ -157,7 +161,10 @@ class GeminiImageCaptionAnnotator(ImageCaptionAnnotator):
         return url, request_dict
 
     def parse_response(self, response_json):
-        return response_json["candidates"][0]["content"]["parts"][0]["text"].strip()
+        try:
+            return response_json["candidates"][0]["content"]["parts"][0]["text"].strip()
+        except:
+            raise ValueError(f"Gemini caption failed: response{response_json}")
 
 
 class AnthropicImageCaptionAnnotator(ImageCaptionAnnotator):
@@ -172,6 +179,7 @@ class AnthropicImageCaptionAnnotator(ImageCaptionAnnotator):
     def __init__(
         self,
         anthropic_api_keys: list[str],
+        prompt=_DEFAULT_IMAGE_CAPTION_PROMPT,
         anthropic_model_name="claude-3-haiku-20240307",
         qps_limit: float = 0.8,
         max_concurrent_call=10,
@@ -183,6 +191,7 @@ class AnthropicImageCaptionAnnotator(ImageCaptionAnnotator):
             max_concurrent_call=max_concurrent_call,
         )
         self._anthropic_model_name = anthropic_model_name
+        self._prompt = prompt
 
     def construct_headers(self, api_key):
         return ImageCaptionAnnotator.DEFAULT_REQUEST_HEADERS | {
@@ -206,7 +215,7 @@ class AnthropicImageCaptionAnnotator(ImageCaptionAnnotator):
                                 "data": encoded_img_bytes,
                             },
                         },
-                        {"type": "text", "text": AnthropicImageCaptionAnnotator.PROMPT},
+                        {"type": "text", "text": self._prompt},
                     ],
                 },
             ],
@@ -214,6 +223,9 @@ class AnthropicImageCaptionAnnotator(ImageCaptionAnnotator):
         return "https://api.anthropic.com/v1/messages", request_dict
 
     def parse_response(self, response_json):
-        return " ".join(
-            [x["text"] for x in response_json["content"] if x["type"] == "text"]
-        )
+        try:
+            return " ".join(
+                [x["text"] for x in response_json["content"] if x["type"] == "text"]
+            )
+        except:
+            raise ValueError(f"Anthropic caption failed: response{response_json}")

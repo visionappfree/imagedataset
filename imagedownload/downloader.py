@@ -62,6 +62,7 @@ class Downloader:
 
     async def _download(
         self,
+        shard_id: int,
         download_tasks: list[Task],
         writer: Writer,
         stats: dict,
@@ -81,7 +82,9 @@ class Downloader:
                 for t in download_tasks
             ]
             for _ in tqdm(
-                asyncio.as_completed(tasks), total=len(tasks), desc="Downloading"
+                asyncio.as_completed(tasks),
+                total=len(tasks),
+                desc=f"[shard {shard_id}]Downloading",
             ):
                 await _
 
@@ -99,7 +102,7 @@ class Downloader:
 
         try:
             start_time = time.time()
-            asyncio.run(self._download(download_tasks, writer, stats))
+            asyncio.run(self._download(shard_id, download_tasks, writer, stats))
             end_time = time.time()
 
             duration = end_time - start_time

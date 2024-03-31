@@ -19,10 +19,51 @@ from .writer import WebDatasetSampleWriter
 
 
 def download_one_shard(args) -> dict:
-    image_downloader, shard_id, tasks, output_file_path, output_schema = args
+    (
+        input_schema,
+        shard_id,
+        shard_task,
+        output_file_path,
+        max_concurrent_downloads_per_process,
+        enable_gemini_caption,
+        gemini_qps_limit,
+        enable_anthropic_caption,
+        anthropic_qps_limit,
+    ) = args
+    image_converter = ImageDataConverter()
+    schema_list = image_converter.pa_metadata_schema()
+    schema_list.extend(input_schema)
+    annotators = []
+    if enable_gemini_caption:
+        gemini_caption_annotator = GeminiImageCaptionAnnotator(
+            gemini_api_keys=[
+                os.getenv("GEMINI_API_KEY"),
+            ],
+            qps_limit=gemini_qps_limit,
+        )
+        schema_list.extend(gemini_caption_annotator.pa_metadata_schema())
+        annotators.append(gemini_caption_annotator)
+    if enable_anthropic_caption:
+        anthropic_annotator = AnthropicImageCaptionAnnotator(
+            anthropic_api_keys=[os.getenv("ANTHROPIC_API_KEY")],
+            qps_limit=anthropic_qps_limit,
+        )
+        schema_list.extend(anthropic_annotator.pa_metadata_schema())
+        annotators.append(anthropic_annotator)
+    output_schema = pa.schema(schema_list)
+
     writer = WebDatasetSampleWriter(output_file_path, schema=output_schema)
-    stats = image_downloader.download(shard_id, download_tasks=tasks, writer=writer)
+    image_downloader = Downloader(
+        max_concurrent_downloads=max_concurrent_downloads_per_process,
+        converter=image_converter,
+        annotators=annotators,
+    )
+    stats = image_downloader.download(
+        shard_id, download_tasks=shard_task, writer=writer
+    )
     writer.close()
+    for a in annotators:
+        a.close()
     return stats
 
 
@@ -35,7 +76,9 @@ def download(
     processes_count=1,
     max_concurrent_downloads_per_process: int = 48,
     enable_gemini_caption=False,
+    gemini_qps_limit=0.8,
     enable_anthropic_caption=False,
+    anthropic_qps_limit=0.8,
 ):
     fs, output_folder_path = fsspec.core.url_to_fs(output_folder)
     if not fs.exists(output_folder_path):
@@ -45,51 +88,27 @@ def download(
         return None
     df = pd.read_csv(input_csv_file_path, delimiter=input_delimiter)
     task_converter = DataFrameToTaskConverter(data=df, url_column=url_column)
-
-    image_converter = ImageDataConverter()
-    schema_list = image_converter.pa_metadata_schema()
     tasks = task_converter.get_tasks()
     input_schema = task_converter.pa_metadata_schema()
-    schema_list.extend(input_schema)
-    annotators = []
-    if enable_gemini_caption:
-        gemini_caption_annotator = GeminiImageCaptionAnnotator(
-            gemini_api_keys=[
-                os.getenv("GEMINI_API_KEY"),
-            ],
-            qps_limit=0.5,
-        )
-        schema_list.extend(gemini_caption_annotator.pa_metadata_schema())
-        annotators.append(gemini_caption_annotator)
-    if enable_anthropic_caption:
-        anthropic_annotator = AnthropicImageCaptionAnnotator(
-            anthropic_api_keys=[os.getenv("ANTHROPIC_API_KEY")],
-            qps_limit=0.5,
-        )
-        schema_list.extend(anthropic_annotator.pa_metadata_schema())
-        annotators.append(anthropic_annotator)
-    output_schema = pa.schema(schema_list)
-
     num_tasks = df.shape[0]
     num_shards = math.ceil(num_tasks / number_sample_per_shard)
     print(f"tasks split to {num_shards} shards.")
     num_shards_digits = math.ceil(math.log10(num_shards))
-    image_downloader = Downloader(
-        max_concurrent_downloads=max_concurrent_downloads_per_process,
-        converter=image_converter,
-        annotators=annotators,
-    )
     shard_tasks = [
         tasks[x : min(x + number_sample_per_shard, num_tasks)]
         for x in range(0, num_tasks, number_sample_per_shard)
     ]
     shard_tasks_with_params = [
         (
-            image_downloader,
+            input_schema,
             shard_id,
             shard_task,
             os.path.join(output_folder_path, f"{shard_id:0{num_shards_digits}}"),
-            output_schema,
+            max_concurrent_downloads_per_process,
+            enable_gemini_caption,
+            gemini_qps_limit,
+            enable_anthropic_caption,
+            anthropic_qps_limit,
         )
         for shard_id, shard_task in enumerate(shard_tasks)
     ]
@@ -117,9 +136,6 @@ def download(
     sorted_stats.sort(key=lambda i: i[1], reverse=True)
     for k, v in sorted_stats[:10]:
         print(f"download {k}, count: {v}")
-
-    for a in annotators:
-        a.close()
 
 
 def main():
